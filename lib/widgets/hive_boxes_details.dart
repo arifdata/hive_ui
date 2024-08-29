@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:hive_ui/core/screen_utils.dart';
 
 import '../boxes_view.dart';
 import '../extensions.dart';
@@ -19,6 +21,8 @@ class HiveBoxesDetails extends StatefulWidget {
   final List<Map<String, dynamic>> rows;
   final VoidCallback onBackPressed;
   final FieldPressedCallback onFieldPressed;
+  final void Function()? onRefresh;
+  final Box? boxTemp;
   final void Function(
     Map<String, dynamic> rowIndices,
     List<String> columns,
@@ -28,6 +32,8 @@ class HiveBoxesDetails extends StatefulWidget {
     Key? key,
     required this.onDeleteAll,
     this.onDeleteRows,
+    this.onRefresh,
+    this.boxTemp,
     required this.columnTitleTextStyle,
     required this.rowTitleTextStyle,
     required this.onBackPressed,
@@ -167,6 +173,8 @@ class _HiveBoxesDetailsState extends State<HiveBoxesDetails> with BoxViewMixin {
 
   @override
   void setState(VoidCallback fn) {
+    print('pagination model');
+    print(rows.length);
     _paginationModel = ValueNotifier<PaginationModel>(
       PaginationModel(
         totalPageCount: (rows.length / 20).ceil(),
@@ -198,104 +206,234 @@ class _HiveBoxesDetailsState extends State<HiveBoxesDetails> with BoxViewMixin {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              SearchWidget(
-                scope: SearchScope.field,
-                onSearch: (query) => searchField = query,
-                onSearchValue: onSearchValue,
-                fields: widget.columns,
-              ),
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text("length of data :  ${rows.length}"),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
+          if (ScreenUtils.instance.isDesktopScreen)
+            Row(
               children: [
-                ElevatedButton(
-                  onPressed: () => widget.onAddRow.call(
-                    {},
-                    _paginationModel.value.columnsKeysToShow,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: buttonSize,
-                  ),
-                  child: const FittedBox(
-                    child: Text('Add New'),
-                  ),
+                SearchWidget(
+                  scope: SearchScope.field,
+                  onSearch: (query) => searchField = query,
+                  onSearchValue: onSearchValue,
+                  fields: widget.columns,
                 ),
-                const SizedBox(width: 32),
-                ElevatedButton(
-                  onPressed: widget.onDeleteAll,
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: buttonSize,
-                  ),
-                  child: const FittedBox(
-                    child: Text('Delete All'),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text("length of data :  ${rows.length}"),
                 ),
-                const SizedBox(width: 32),
-                if (enableSelection)
-                  ElevatedButton(
-                    onPressed: () {
-                      final objectsIndices = getSelectedObjectIndices();
-                      widget.onDeleteRows?.call(objectsIndices);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      fixedSize: buttonSize,
-                    ),
-                    child: const FittedBox(
-                      child: Text('Delete Selected'),
-                    ),
-                  ),
-                const SizedBox(width: 32),
-                ElevatedButton(
-                  onPressed: () async {
-                    final selectedColumns = await showDialog(
-                      context: context,
-                      builder: (_) => ColumnsFilterDialog(
-                        allColumns: widget.columns,
-                        selectedColumns:
-                            _paginationModel.value.columnsKeysToShow,
-                      ),
-                    );
-                    if (selectedColumns != null) {
-                      _paginationModel.value = _paginationModel.value.copyWith(
-                        columnsKeysToShow: selectedColumns,
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: buttonSize,
-                  ),
-                  child: const FittedBox(
-                    child: Text('Select Columns'),
-                  ),
+              ],
+            )
+          else
+            Wrap(
+              runAlignment: WrapAlignment.spaceAround,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceAround,
+              children: [
+                SearchWidget(
+                  scope: SearchScope.field,
+                  onSearch: (query) => searchField = query,
+                  onSearchValue: onSearchValue,
+                  fields: widget.columns,
                 ),
-                const SizedBox(width: 32),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    fixedSize: buttonSize,
-                  ),
-                  onPressed: () {
-                    final objectsIndices = getSelectedObjectIndices();
-                    final objects = [];
-                    for (int index in objectsIndices) {
-                      objects.add(widget.rows[index]);
-                    }
-                    final json =
-                        const JsonEncoder.withIndent("  ").convert(objects);
-                    FlutterClipboardHiveUi.copy(json);
-                  },
-                  child: const Text('Copy Selected'),
-                )
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text("length of data :  ${rows.length}"),
+                ),
               ],
             ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32.0),
+            child: ScreenUtils.instance.isDesktopScreen
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        onPressed: () {
+                          widget.onRefresh?.call();
+                          setState(() {
+                            rows = widget.rows;
+                          });
+                        },
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      // ElevatedButton(
+                      //   onPressed: () => widget.onAddRow.call(
+                      //     {},
+                      //     _paginationModel.value.columnsKeysToShow,
+                      //   ),
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Add New'),
+                      //   ),
+                      // ),
+                      // const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   onPressed: widget.onDeleteAll,
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Delete All'),
+                      //   ),
+                      // ),
+                      const SizedBox(width: 32),
+                      if (enableSelection)
+                        ElevatedButton(
+                          onPressed: () {
+                            final objectsIndices = getSelectedObjectIndices();
+                            widget.onDeleteRows?.call(objectsIndices);
+                          },
+                          // style: ElevatedButton.styleFrom(
+                          //   fixedSize: buttonSize,
+                          // ),
+                          child: const FittedBox(
+                            child: Text('Delete Selected'),
+                          ),
+                        ),
+                      const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   onPressed: () async {
+                      //     final selectedColumns = await showDialog(
+                      //       context: context,
+                      //       builder: (_) => ColumnsFilterDialog(
+                      //         allColumns: widget.columns,
+                      //         selectedColumns:
+                      //             _paginationModel.value.columnsKeysToShow,
+                      //       ),
+                      //     );
+                      //     if (selectedColumns != null) {
+                      //       _paginationModel.value =
+                      //           _paginationModel.value.copyWith(
+                      //         columnsKeysToShow: selectedColumns,
+                      //       );
+                      //     }
+                      //   },
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Select Columns'),
+                      //   ),
+                      // ),
+                      const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   onPressed: () {
+                      //     final objectsIndices = getSelectedObjectIndices();
+                      //     final objects = [];
+                      //     for (int index in objectsIndices) {
+                      //       objects.add(widget.rows[index]);
+                      //     }
+                      //     final json = const JsonEncoder.withIndent("  ")
+                      //         .convert(objects);
+                      //     FlutterClipboardHiveUi.copy(json);
+                      //   },
+                      //   child: const Text('Copy Selected'),
+                      // )
+                    ],
+                  )
+                : Wrap(
+                    alignment: WrapAlignment.spaceEvenly,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                            // fixedSize: buttonSize,
+                            ),
+                        onPressed: () {
+                          widget.onRefresh?.call();
+                          setState(() {
+                            rows = widget.rows;
+                          });
+                        },
+                        child: const Text('Refresh'),
+                      ),
+                      // ElevatedButton(
+                      //   onPressed: () => widget.onAddRow.call(
+                      //     {},
+                      //     _paginationModel.value.columnsKeysToShow,
+                      //   ),
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Add New'),
+                      //   ),
+                      // ),
+                      // const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   onPressed: widget.onDeleteAll,
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Delete All'),
+                      //   ),
+                      // ),
+                      // const SizedBox(width: 32),
+                      if (enableSelection)
+                        ElevatedButton(
+                          onPressed: () {
+                            final objectsIndices = getSelectedObjectIndices();
+                            widget.onDeleteRows?.call(objectsIndices);
+                          },
+                          // style: ElevatedButton.styleFrom(
+                          //     // fixedSize: buttonSize,
+                          //     ),
+                          child: const FittedBox(
+                            child: Text('Delete Selected'),
+                          ),
+                        ),
+                      // const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   onPressed: () async {
+                      //     final selectedColumns = await showDialog(
+                      //       context: context,
+                      //       builder: (_) => ColumnsFilterDialog(
+                      //         allColumns: widget.columns,
+                      //         selectedColumns:
+                      //             _paginationModel.value.columnsKeysToShow,
+                      //       ),
+                      //     );
+                      //     if (selectedColumns != null) {
+                      //       _paginationModel.value =
+                      //           _paginationModel.value.copyWith(
+                      //         columnsKeysToShow: selectedColumns,
+                      //       );
+                      //     }
+                      //   },
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   child: const FittedBox(
+                      //     child: Text('Select Columns'),
+                      //   ),
+                      // ),
+                      // const SizedBox(width: 32),
+                      // ElevatedButton(
+                      //   style: ElevatedButton.styleFrom(
+                      //     fixedSize: buttonSize,
+                      //   ),
+                      //   onPressed: () {
+                      //     final objectsIndices = getSelectedObjectIndices();
+                      //     final objects = [];
+                      //     for (int index in objectsIndices) {
+                      //       objects.add(widget.rows[index]);
+                      //     }
+                      //     final json = const JsonEncoder.withIndent("  ")
+                      //         .convert(objects);
+                      //     FlutterClipboardHiveUi.copy(json);
+                      //   },
+                      //   child: const Text('Copy Selected'),
+                      // )
+                    ],
+                  ),
           ),
           ValueListenableBuilder<PaginationModel>(
               valueListenable: _paginationModel,
@@ -381,3 +519,4 @@ class PaginationModel {
     );
   }
 }
+
